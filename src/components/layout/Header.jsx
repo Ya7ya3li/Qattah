@@ -1,9 +1,10 @@
-import React from 'react';
-// سحبنا أيقونة التحديث (التصفير) من المكتبة
-import { Wallet, RefreshCcw } from 'lucide-react'; 
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
+import { Wallet, RefreshCcw, Bell } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const Header = ({ totalAmount = 0, onClear }) => {
+const Header = ({ totalAmount = 0, onClear, notifications = [], onClearNotifications }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: -20 }}
@@ -18,8 +19,21 @@ const Header = ({ totalAmount = 0, onClear }) => {
           <span className="text-qattah-neonGreen text-xs font-bold">صفي النية وسدد 💸</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 relative">
           
+          {/* 🔔 جرس الإشعارات الحي */}
+          <button 
+            onClick={() => setShowDropdown(!showDropdown)}
+            className="relative bg-white/5 p-2.5 rounded-xl border border-white/10 hover:bg-white/10 active:scale-95 transition-all"
+          >
+            <Bell className="w-5 h-5 text-gray-300" />
+            {notifications.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
+                {notifications.length}
+              </span>
+            )}
+          </button>
+
           {/* زر تصفير القطة */}
           <button 
             onClick={onClear}
@@ -39,8 +53,45 @@ const Header = ({ totalAmount = 0, onClear }) => {
             </div>
           </div>
         </div>
-
       </div>
+
+      {/* 📜 قائمة الإشعارات المنسدلة الزجاجية السينمائية */}
+      <AnimatePresence>
+        {showDropdown && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute top-24 left-6 right-6 bg-qattah-dark/95 border border-white/10 rounded-3xl p-4 shadow-2xl max-h-80 overflow-y-auto z-50 backdrop-blur-xl"
+          >
+            <div className="flex justify-between items-center mb-3 pb-2 border-b border-white/5">
+              <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                <Bell className="w-4 h-4 text-qattah-neonGreen" /> رادار الطقطقة لايف 👀
+              </h4>
+              {notifications.length > 0 && (
+                <button 
+                  onClick={() => { onClearNotifications(); setShowDropdown(false); }}
+                  className="text-gray-500 hover:text-red-400 text-xs font-bold transition-colors"
+                >
+                  مسح الكل
+                </button>
+              )}
+            </div>
+
+            {notifications.length === 0 ? (
+              <p className="text-gray-500 text-xs text-center py-6">الوضع هادي.. ما فيه هياط جديد لسه 😂</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {notifications.map((notif) => (
+                  <div key={notif.id} className="bg-white/5 p-3 rounded-xl border border-white/5 text-right text-xs text-gray-300 font-medium leading-relaxed">
+                    {notif.message}
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
