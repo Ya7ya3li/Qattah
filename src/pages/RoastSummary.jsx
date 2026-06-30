@@ -1,99 +1,172 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import NeonButton from '../components/ui/NeonButton';
-import { Share2, Flame, TrendingDown, TrendingUp, AlertTriangle, CheckCircle, Smartphone } from 'lucide-react';
-import { calculateDebts } from '../utils/splitMath';
+import { Flame, CheckCircle2, ShieldCheck, ShieldAlert, CreditCard, Banknote } from 'lucide-react';
+import { supabase } from '../utils/supabaseClient';
 
-// الشاشة صارت تستقبل onSettle (دالة السداد)
-const RoastSummary = ({ expenses, onSettle }) => {
-  const stats = calculateDebts(expenses);
+const RoastSummary = ({ expenses, currentUser }) => {
 
-  if (!stats || stats.isSingle) {
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center gap-4 px-6 pt-32 text-center">
-        <AlertTriangle className="w-16 h-16 text-yellow-500 mb-2" />
-        <h2 className="text-xl font-bold text-white">الوضع هادي جداً!</h2>
-        <p className="text-gray-400 text-sm">ضيف فواتير وأشخاص عشان الخوارزمية تبدأ شغلها 😂</p>
-      </motion.div>
+  // دالة لتغيير حالة السداد في قاعدة البيانات
+  const updateSplitStatus = async (expenseId, currentSplits, personName, newStatus) => {
+    const updatedSplits = currentSplits.map(split => 
+      split.name === personName ? { ...split, status: newStatus } : split
     );
-  }
 
-  // شاشة "صافية لبن" تظهر آلياً إذا تصافوا
-  if (stats.transactions.length === 0) {
-    return (
-      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center gap-4 px-6 pt-32 text-center">
-        <div className="bg-qattah-neonGreen/20 p-5 rounded-full mb-2 border border-qattah-neonGreen/30 shadow-[0_0_30px_rgba(57,255,20,0.2)]">
-          <CheckCircle className="w-16 h-16 text-qattah-neonGreen" />
-        </div>
-        <h2 className="text-2xl font-bold text-white">صافية لبن 🥛</h2>
-        <p className="text-gray-400 text-sm">ما أحد يطلب أحد، الشلة كلها كفو وكلهم مسددين اللي عليهم!</p>
-        <p className="text-qattah-neonGreen font-bold mt-2">إجمالي القطية: {stats.totalSpent.toFixed(2)} ريال</p>
-      </motion.div>
-    );
-  }
+    const { error } = await supabase
+      .from('expenses')
+      .update({ splits: updatedSplits })
+      .eq('id', expenseId);
 
-  const handlePaymentClick = (from, to, amount) => {
-    alert(`💳 توجيه ${from} لسداد مبلغ ${amount} ريال لـ ${to} عبر STC Pay أو التحويل البنكي... (تم نسخ الآيبان)`);
+    if (error) alert('حدث خطأ في تحديث الحالة!');
   };
 
+  // إخفاء الفواتير اللي "الكل" مسدد فيها
+  const activeExpenses = expenses.filter(exp => 
+    exp.splits && 
+    exp.splits.length > 0 && 
+    exp.splits.some(s => s.status !== 'paid') 
+  );
+
   return (
-    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col gap-6 px-6 pb-32 pt-4">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 px-6 pb-32 pt-4">
+      
       <div className="text-center mb-2">
-        <h2 className="text-qattah-neonGreen text-2xl font-extrabold flex justify-center items-center gap-2">
-          <Flame className="w-7 h-7 text-red-500" /> الفضايح وتصفية الحسابات
+        <h2 className="text-3xl font-black text-white flex items-center justify-center gap-2">
+          <Flame className="w-8 h-8 text-red-500" /> ملخص الفضايح
         </h2>
+        <p className="text-gray-400 text-sm mt-2">الكشف الواضح.. الأخضر كفو، والأحمر مطلوب 💸</p>
       </div>
 
-      <div className="bg-qattah-glass border border-yellow-500/30 rounded-3xl p-5 relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-yellow-500/20 px-4 py-1 rounded-bl-2xl text-yellow-500 text-sm font-bold">الشيخ 👑</div>
-        <h3 className="text-white text-xl font-bold mt-2">{stats.sheikh.name}</h3>
-        <p className="text-gray-400 text-sm">شايل الشلة ويطلبهم ({stats.sheikh.amount.toFixed(2)} ريال)، بيض الله وجهه.</p>
-      </div>
+      {activeExpenses.length === 0 ? (
+        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 text-center mt-10">
+          <CheckCircle2 className="w-16 h-16 text-qattah-neonGreen mx-auto mb-4 opacity-80" />
+          <h3 className="text-white font-bold text-xl mb-2">الكل مصفّي ومسدد!</h3>
+          <p className="text-gray-500 text-sm">شلتك ما شاء الله عليهم ما يحتاجون فضايح 🕊️</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-5">
+          {activeExpenses.map((expense) => {
+            const isOwner = currentUser?.name === expense.payer;
+            
+            return (
+              <div key={expense.id} className="bg-qattah-glass border border-white/10 rounded-3xl p-5 shadow-xl relative overflow-hidden">
+                <div className="border-b border-white/10 pb-3 mb-4 flex justify-between items-center">
+                  <div>
+                    <p className="text-gray-400 text-xs">فاتورة: <span className="text-white font-bold text-sm">{expense.title}</span></p>
+                    <p className="text-gray-400 text-xs">الدائن: <span className="text-qattah-neonGreen font-bold">{expense.payer}</span></p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-white font-black text-lg">{Number(expense.amount).toFixed(2)}</p>
+                    <p className="text-gray-500 text-[10px]">إجمالي الفاتورة</p>
+                  </div>
+                </div>
 
-      {stats.mutaffir.amount < -0.01 && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-3xl p-5 relative overflow-hidden">
-          <div className="absolute top-0 right-0 bg-red-500/20 px-4 py-1 rounded-bl-2xl text-red-400 text-sm font-bold">المطفر 🏃‍♂️</div>
-          <h3 className="text-white text-xl font-bold mt-2">{stats.mutaffir.name}</h3>
-          <p className="text-gray-400 text-sm">أكثر واحد مديون للشلة ({Math.abs(stats.mutaffir.amount).toFixed(2)} ريال).. افضحوه!</p>
+                <div className="flex flex-col gap-3">
+                  {/* هنا نعرض "كل" المشاركين ونغير شكل الكرت بناءً على حالتهم */}
+                  {expense.splits.map((split, idx) => {
+                    const isMe = currentUser?.name === split.name;
+
+                    return (
+                      <React.Fragment key={idx}>
+                        
+                        {/* 🟢 حالة 1: تم السداد */}
+                        {split.status === 'paid' && (
+                          <div className="flex justify-between items-center bg-black/40 border border-green-500/20 p-3 rounded-xl">
+                            <span className="text-gray-300 font-bold text-sm">{split.name} {isMe && '(أنت)'}</span>
+                            <span className="text-green-400 font-bold text-xs bg-green-500/10 px-2 py-1 rounded-lg">تم السداد ✅</span>
+                          </div>
+                        )}
+
+                        {/* 🔴 حالة 2: بانتظار السداد (مطلوب) */}
+                        {split.status === 'pending' && (
+                          <div className="bg-black/40 border border-red-500/20 p-3 rounded-xl flex flex-col gap-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-white font-bold text-sm">{split.name} {isMe && '(أنت)'}</span>
+                              
+                              {/* إذا أنا المديون أطالع المبلغ، وإذا متفرج أطالع الكلمة الحمراء */}
+                              {isMe ? (
+                                <span className="text-red-400 font-black">{split.amount.toFixed(2)} ريال</span>
+                              ) : (
+                                <span className="text-red-400 font-bold text-xs bg-red-500/10 px-2 py-1 rounded-lg">انتظار السداد ❌</span>
+                              )}
+                            </div>
+
+                            {/* إذا أنا المديون: تطلع لي الأرقام وزر الدفع فقط */}
+                            {isMe && (
+                              <div className="flex flex-col gap-3 mt-1 border-t border-red-500/10 pt-3">
+                                <div className="bg-white/5 border border-white/10 p-3 rounded-xl flex flex-col gap-2">
+                                  <p className="text-gray-400 text-[10px] font-bold mb-1">بيانات التحويل لصاحب الفاتورة:</p>
+                                  {expense.stc_pay && (
+                                    <div className="flex items-center gap-2">
+                                      <CreditCard className="w-4 h-4 text-qattah-neonGreen" />
+                                      <span className="text-white text-xs font-bold font-mono tracking-wider">{expense.stc_pay}</span>
+                                    </div>
+                                  )}
+                                  {expense.iban && (
+                                    <div className="flex items-center gap-2">
+                                      <Banknote className="w-4 h-4 text-qattah-neonGreen" />
+                                      <span className="text-white text-xs font-bold font-mono tracking-wider">{expense.iban}</span>
+                                    </div>
+                                  )}
+                                  {!expense.stc_pay && !expense.iban && (
+                                    <p className="text-gray-500 text-xs">صاحب الفاتورة ما سجل بيانات دفع، حولها له كاش!</p>
+                                  )}
+                                </div>
+
+                                <button 
+                                  onClick={() => updateSplitStatus(expense.id, expense.splits, split.name, 'awaiting_confirmation')}
+                                  className="w-full bg-qattah-neonGreen text-black font-bold py-2.5 rounded-xl text-sm hover:bg-qattah-neonGreen/80 transition-all active:scale-95 shadow-[0_0_15px_rgba(182,255,22,0.3)]"
+                                >
+                                  سدد المبلغ 💸
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 🟡 حالة 3: المديون ضغط "سدد" وبانتظار تأكيد الدائن */}
+                        {split.status === 'awaiting_confirmation' && (
+                          <div className="bg-black/40 border border-yellow-500/30 p-3 rounded-xl flex flex-col gap-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-white font-bold text-sm">{split.name} {isMe && '(أنت)'}</span>
+                              
+                              {/* إذا ما كنت صاحب الفاتورة تطلع لك الكلمة الصفراء */}
+                              {!isOwner && (
+                                <span className="text-yellow-400 font-bold text-xs bg-yellow-500/10 px-2 py-1 rounded-lg">انتظار التأكيد ⏳</span>
+                              )}
+                            </div>
+
+                            {/* إذا أنا صاحب الفاتورة: تطلع لي الأزرار عشان أوافق أو أرفض */}
+                            {isOwner && (
+                              <div className="mt-1 border-t border-yellow-500/10 pt-3">
+                                <p className="text-yellow-400 text-xs text-center mb-3 font-bold">يقول إنه سدد المبلغ ({split.amount.toFixed(2)} ريال).. وصلك شيء؟</p>
+                                <div className="flex gap-2">
+                                  <button 
+                                    onClick={() => updateSplitStatus(expense.id, expense.splits, split.name, 'paid')}
+                                    className="flex-1 flex justify-center items-center gap-1 bg-green-500/20 text-green-400 text-xs font-bold py-2.5 rounded-xl border border-green-500/30 hover:bg-green-500/30 transition-all active:scale-95"
+                                  >
+                                    <ShieldCheck className="w-4 h-4" /> ما قصرت 🤝
+                                  </button>
+                                  <button 
+                                    onClick={() => updateSplitStatus(expense.id, expense.splits, split.name, 'pending')}
+                                    className="flex-1 flex justify-center items-center gap-1 bg-red-500/20 text-red-400 text-xs font-bold py-2.5 rounded-xl border border-red-500/30 hover:bg-red-500/30 transition-all active:scale-95"
+                                  >
+                                    <ShieldAlert className="w-4 h-4" /> ما وصلني شي 🤨
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
-
-      <div className="bg-white/5 rounded-3xl p-5 border border-white/10 mt-2">
-        <h4 className="text-white font-bold mb-4 text-lg">الزبدة.. مين يحول لمين؟ 💸</h4>
-        <div className="flex flex-col gap-4">
-          {stats.transactions.map((trx, index) => (
-            <div key={index} className="flex flex-col gap-3 bg-black/40 p-4 rounded-xl border border-white/5">
-              
-              <div className="flex justify-between items-center">
-                <span className="text-red-400 flex items-center gap-2 font-bold"><TrendingDown className="w-5 h-5"/> {trx.from}</span>
-                <span className="text-white text-xs bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">يحول {trx.amount} ➡️</span>
-                <span className="text-qattah-neonGreen flex items-center gap-2 font-bold"><TrendingUp className="w-5 h-5"/> {trx.to}</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <button 
-                  onClick={() => handlePaymentClick(trx.from, trx.to, trx.amount)}
-                  className="flex items-center justify-center gap-2 bg-[#4c185e] hover:bg-[#3b1248] text-white text-xs py-2.5 rounded-lg transition-all"
-                >
-                  <Smartphone className="w-4 h-4" /> STC Pay
-                </button>
-                {/* 🚀 ربطنا الزر بالدالة اللي تعدل الخوارزمية */}
-                <button 
-                  onClick={() => onSettle(trx.from, trx.to, trx.amount)}
-                  className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs py-2.5 rounded-lg transition-all"
-                >
-                  <CheckCircle className="w-4 h-4" /> تم السداد
-                </button>
-              </div>
-
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <NeonButton color="green" fullWidth icon={Share2}>
-        افضحهم في السناب 📸
-      </NeonButton>
     </motion.div>
   );
 };

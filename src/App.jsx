@@ -11,18 +11,25 @@ import { supabase } from './utils/supabaseClient';
 function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [expenses, setExpenses] = useState([]);
-  const [notifications, setNotifications] = useState([]); // ذاكرة الإشعارات
+  const [notifications, setNotifications] = useState([]); 
   
-  const [currentUser, setCurrentUser] = useState(() => {
-    const savedUser = localStorage.getItem('qattah_user');
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        if (data) setCurrentUser(data);
+      }
+    };
+    checkUser();
+  }, []);
 
   useEffect(() => {
     fetchExpenses();
     fetchNotifications();
 
-    // 🚀 التزامن اللحظي 1: مراقبة جدول الفواتير
     const expenseSub = supabase
       .channel('live-expenses')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
@@ -30,11 +37,10 @@ function App() {
       })
       .subscribe();
 
-    // 🚀 التزامن اللحظي 2: مراقبة رادار الإشعارات وبثها لايف للجرس
     const notifSub = supabase
       .channel('live-notifications')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
-        setNotifications((prev) => [payload.new, ...prev]); // دفع الإشعار الجديد فوراً لأعلى القائمة
+        setNotifications((prev) => [payload.new, ...prev]); 
       })
       .subscribe();
 
@@ -54,63 +60,71 @@ function App() {
     setNotifications(data || []);
   };
 
+  // 🚀 التحديث الأهم: هنا نرسل كل البيانات الجديدة للسيرفر (التقسيم + STC + IBAN)
   const handleAddExpense = async (newExpense) => {
     const { error } = await supabase.from('expenses').insert([{
       title: newExpense.title,
       payer: newExpense.payer,
       amount: newExpense.amount,
       involved: newExpense.involved,
-      user_id: newExpense.userId
+      user_id: newExpense.userId,
+      image_url: newExpense.image_url,
+      is_alert: false,
+      splits: newExpense.splits,
+      stc_pay: newExpense.stc_pay,
+      iban: newExpense.iban
     }]);
     if (!error) setActiveTab('home');
   };
 
-  const handleSettleDebt = async (from, to, amount) => {
-    await supabase.from('expenses').insert([{
-      title: 'سداد دين 🤝',
-      payer: from,
-      amount: Number(amount),
-      involved: [to],
-      user_id: currentUser ? currentUser.id : 'system'
-    }]);
-  };
-
-  // دالة مسح الإشعارات من السيرفر
   const handleClearNotifications = async () => {
-    const { error } = await supabase.from('notifications').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // مسح الكل أمنياً
+    const { error } = await supabase.from('notifications').delete().neq('id', '00000000-0000-0000-0000-000000000000'); 
     if (!error) setNotifications([]);
   };
 
-  const handleClearAll = () => {
-    alert('تصفير القطة الحين يحتاج تمسحها من قاعدة البيانات في Supabase مباشرة لضمان الأمان.');
+  const handleClearMyExpenses = async () => {
+    if (!currentUser) {
+      alert('لازم تسجل دخول عشان تصفر فواتيرك!');
+      return;
+    }
+    
+    const confirmClear = window.confirm('متأكد تبي تحذف كل الفواتير اللي أنت سجلتها؟ (هذا الإجراء ما يمسح فواتير أخوياك)');
+    
+    if (confirmClear) {
+      const { error } = await supabase.from('expenses').delete().eq('user_id', currentUser.id); 
+      if (error) alert('حدث خطأ أثناء مسح فواتيرك!');
+    }
   };
 
   const handleLogin = (user) => {
     setCurrentUser(user);
-    localStorage.setItem('qattah_user', JSON.stringify(user));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setCurrentUser(null);
-    localStorage.removeItem('qattah_user');
     setActiveTab('home');
   };
 
-  const totalAmount = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+  const myTotalAmount = expenses
+    .filter(exp => currentUser && exp.user_id === currentUser.id)
+    .reduce((sum, exp) => sum + Number(exp.amount), 0);
 
   return (
     <div className="min-h-screen bg-qattah-dark font-tajawal relative overflow-hidden">
-      {/* مررنا الإشعارات ودالة مسحها للترويسة */}
       <Header 
-        totalAmount={totalAmount} 
-        onClear={handleClearAll} 
+        myTotalAmount={myTotalAmount} 
+        onClearMyExpenses={handleClearMyExpenses} 
         notifications={notifications}
         onClearNotifications={handleClearNotifications}
       />
       
       <main className="w-full max-w-lg mx-auto">
-        {activeTab === 'home' && <Home expenses={expenses} />}
-        {activeTab === 'summary' && <RoastSummary expenses={expenses} onSettle={handleSettleDebt} />}
+        {activeTab === 'home' && <Home expenses={expenses} currentUser={currentUser} />}
+        
+        {/* 🚀 السطر السحري: مررنا هوية المستخدم لشاشة الفضايح عشان تعرف مين اللي يطالعها */}
+        {activeTab === 'summary' && <RoastSummary expenses={expenses} currentUser={currentUser} />}
+        
         {activeTab === 'add' && (
           currentUser ? <AddExpense onAdd={handleAddExpense} currentUser={currentUser} /> : <Login onLogin={handleLogin} />
         )}
