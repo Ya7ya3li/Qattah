@@ -1,3 +1,4 @@
+import logo from '../assets/logo.png';
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import InputField from '../components/ui/InputField';
@@ -77,8 +78,13 @@ const Login = ({ onLogin }) => {
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-5 px-6 pt-16 text-center">
       <div className="bg-qattah-glass border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
         
-        <div className="bg-qattah-neonGreen/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
-          {isSignUp ? <UserPlus className="w-8 h-8 text-qattah-neonGreen" /> : <LogIn className="w-8 h-8 text-qattah-neonGreen" />}
+        {/* 🌟 اللوجو الجديد الفخم مع تأثير التوهج */}
+        <div className="mx-auto mb-6 w-36 h-36 flex items-center justify-center group cursor-pointer">
+          <img 
+            src={logo} 
+            alt="شعار قطة" 
+            className="w-full h-full object-contain drop-shadow-[0_0_20px_rgba(182,255,22,0.4)] group-hover:scale-110 group-hover:drop-shadow-[0_0_30px_rgba(182,255,22,0.6)] transition-all duration-500" 
+          />
         </div>
         
         <h2 className="text-2xl font-bold text-white mb-2">{isSignUp ? 'حياك في الشلة' : 'سجل دخولك'}</h2>

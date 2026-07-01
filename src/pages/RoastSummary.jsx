@@ -1,11 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Flame, CheckCircle2, ShieldCheck, ShieldAlert, CreditCard, Banknote } from 'lucide-react';
+import { Flame, CheckCircle2, ShieldCheck, ShieldAlert, CreditCard, Banknote, Copy, Check } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
 
 const RoastSummary = ({ expenses, currentUser }) => {
+  // حالة ذكية عشان نتبع أي زر تم نسخه ونطلع له "تم النسخ ✅" لثانيتين
+  const [copiedMap, setCopiedMap] = useState({});
 
-  // دالة لتغيير حالة السداد في قاعدة البيانات
+  const handleCopy = (text, idKey) => {
+    navigator.clipboard.writeText(text); // أمر النسخ في الخلفية
+    setCopiedMap(prev => ({ ...prev, [idKey]: true }));
+    setTimeout(() => {
+      setCopiedMap(prev => ({ ...prev, [idKey]: false }));
+    }, 2000); // يرجع الزر لشكله الطبيعي بعد ثانيتين
+  };
+
   const updateSplitStatus = async (expenseId, currentSplits, personName, newStatus) => {
     const updatedSplits = currentSplits.map(split => 
       split.name === personName ? { ...split, status: newStatus } : split
@@ -19,7 +28,6 @@ const RoastSummary = ({ expenses, currentUser }) => {
     if (error) alert('حدث خطأ في تحديث الحالة!');
   };
 
-  // إخفاء الفواتير اللي "الكل" مسدد فيها
   const activeExpenses = expenses.filter(exp => 
     exp.splits && 
     exp.splits.length > 0 && 
@@ -61,14 +69,12 @@ const RoastSummary = ({ expenses, currentUser }) => {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  {/* هنا نعرض "كل" المشاركين ونغير شكل الكرت بناءً على حالتهم */}
                   {expense.splits.map((split, idx) => {
                     const isMe = currentUser?.name === split.name;
 
                     return (
                       <React.Fragment key={idx}>
                         
-                        {/* 🟢 حالة 1: تم السداد */}
                         {split.status === 'paid' && (
                           <div className="flex justify-between items-center bg-black/40 border border-green-500/20 p-3 rounded-xl">
                             <span className="text-gray-300 font-bold text-sm">{split.name} {isMe && '(أنت)'}</span>
@@ -76,13 +82,11 @@ const RoastSummary = ({ expenses, currentUser }) => {
                           </div>
                         )}
 
-                        {/* 🔴 حالة 2: بانتظار السداد (مطلوب) */}
                         {split.status === 'pending' && (
                           <div className="bg-black/40 border border-red-500/20 p-3 rounded-xl flex flex-col gap-3">
                             <div className="flex justify-between items-center">
                               <span className="text-white font-bold text-sm">{split.name} {isMe && '(أنت)'}</span>
                               
-                              {/* إذا أنا المديون أطالع المبلغ، وإذا متفرج أطالع الكلمة الحمراء */}
                               {isMe ? (
                                 <span className="text-red-400 font-black">{split.amount.toFixed(2)} ريال</span>
                               ) : (
@@ -90,25 +94,46 @@ const RoastSummary = ({ expenses, currentUser }) => {
                               )}
                             </div>
 
-                            {/* إذا أنا المديون: تطلع لي الأرقام وزر الدفع فقط */}
+                            {/* 🚀 قسم الدفع الجديد بعد التحديث السري للأرقام */}
                             {isMe && (
                               <div className="flex flex-col gap-3 mt-1 border-t border-red-500/10 pt-3">
                                 <div className="bg-white/5 border border-white/10 p-3 rounded-xl flex flex-col gap-2">
                                   <p className="text-gray-400 text-[10px] font-bold mb-1">بيانات التحويل لصاحب الفاتورة:</p>
+                                  
                                   {expense.stc_pay && (
-                                    <div className="flex items-center gap-2">
-                                      <CreditCard className="w-4 h-4 text-qattah-neonGreen" />
-                                      <span className="text-white text-xs font-bold font-mono tracking-wider">{expense.stc_pay}</span>
+                                    <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
+                                      <div className="flex items-center gap-2">
+                                        <CreditCard className="w-4 h-4 text-qattah-neonGreen" />
+                                        <span className="text-white text-sm font-bold tracking-wider">STC Pay</span>
+                                      </div>
+                                      <button 
+                                        onClick={() => handleCopy(expense.stc_pay, `${expense.id}-stc`)}
+                                        className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${copiedMap[`${expense.id}-stc`] ? 'bg-qattah-neonGreen/20 text-qattah-neonGreen' : 'bg-white/10 text-gray-300 hover:bg-qattah-neonGreen hover:text-black'}`}
+                                      >
+                                        {copiedMap[`${expense.id}-stc`] ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                        {copiedMap[`${expense.id}-stc`] ? 'تم النسخ' : 'نسخ الرقم'}
+                                      </button>
                                     </div>
                                   )}
+
                                   {expense.iban && (
-                                    <div className="flex items-center gap-2">
-                                      <Banknote className="w-4 h-4 text-qattah-neonGreen" />
-                                      <span className="text-white text-xs font-bold font-mono tracking-wider">{expense.iban}</span>
+                                    <div className="flex justify-between items-center bg-black/40 p-2.5 rounded-lg border border-white/5">
+                                      <div className="flex items-center gap-2">
+                                        <Banknote className="w-4 h-4 text-qattah-neonGreen" />
+                                        <span className="text-white text-sm font-bold tracking-wider">IBAN</span>
+                                      </div>
+                                      <button 
+                                        onClick={() => handleCopy(expense.iban, `${expense.id}-iban`)}
+                                        className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${copiedMap[`${expense.id}-iban`] ? 'bg-qattah-neonGreen/20 text-qattah-neonGreen' : 'bg-white/10 text-gray-300 hover:bg-qattah-neonGreen hover:text-black'}`}
+                                      >
+                                        {copiedMap[`${expense.id}-iban`] ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                        {copiedMap[`${expense.id}-iban`] ? 'تم النسخ' : 'نسخ الآيبان'}
+                                      </button>
                                     </div>
                                   )}
+
                                   {!expense.stc_pay && !expense.iban && (
-                                    <p className="text-gray-500 text-xs">صاحب الفاتورة ما سجل بيانات دفع، حولها له كاش!</p>
+                                    <p className="text-gray-500 text-xs text-center py-2">صاحب الفاتورة ما سجل بيانات دفع، حولها له كاش!</p>
                                   )}
                                 </div>
 
@@ -123,33 +148,23 @@ const RoastSummary = ({ expenses, currentUser }) => {
                           </div>
                         )}
 
-                        {/* 🟡 حالة 3: المديون ضغط "سدد" وبانتظار تأكيد الدائن */}
                         {split.status === 'awaiting_confirmation' && (
                           <div className="bg-black/40 border border-yellow-500/30 p-3 rounded-xl flex flex-col gap-3">
                             <div className="flex justify-between items-center">
                               <span className="text-white font-bold text-sm">{split.name} {isMe && '(أنت)'}</span>
-                              
-                              {/* إذا ما كنت صاحب الفاتورة تطلع لك الكلمة الصفراء */}
                               {!isOwner && (
                                 <span className="text-yellow-400 font-bold text-xs bg-yellow-500/10 px-2 py-1 rounded-lg">انتظار التأكيد ⏳</span>
                               )}
                             </div>
 
-                            {/* إذا أنا صاحب الفاتورة: تطلع لي الأزرار عشان أوافق أو أرفض */}
                             {isOwner && (
                               <div className="mt-1 border-t border-yellow-500/10 pt-3">
                                 <p className="text-yellow-400 text-xs text-center mb-3 font-bold">يقول إنه سدد المبلغ ({split.amount.toFixed(2)} ريال).. وصلك شيء؟</p>
                                 <div className="flex gap-2">
-                                  <button 
-                                    onClick={() => updateSplitStatus(expense.id, expense.splits, split.name, 'paid')}
-                                    className="flex-1 flex justify-center items-center gap-1 bg-green-500/20 text-green-400 text-xs font-bold py-2.5 rounded-xl border border-green-500/30 hover:bg-green-500/30 transition-all active:scale-95"
-                                  >
+                                  <button onClick={() => updateSplitStatus(expense.id, expense.splits, split.name, 'paid')} className="flex-1 flex justify-center items-center gap-1 bg-green-500/20 text-green-400 text-xs font-bold py-2.5 rounded-xl border border-green-500/30 hover:bg-green-500/30 transition-all active:scale-95">
                                     <ShieldCheck className="w-4 h-4" /> ما قصرت 🤝
                                   </button>
-                                  <button 
-                                    onClick={() => updateSplitStatus(expense.id, expense.splits, split.name, 'pending')}
-                                    className="flex-1 flex justify-center items-center gap-1 bg-red-500/20 text-red-400 text-xs font-bold py-2.5 rounded-xl border border-red-500/30 hover:bg-red-500/30 transition-all active:scale-95"
-                                  >
+                                  <button onClick={() => updateSplitStatus(expense.id, expense.splits, split.name, 'pending')} className="flex-1 flex justify-center items-center gap-1 bg-red-500/20 text-red-400 text-xs font-bold py-2.5 rounded-xl border border-red-500/30 hover:bg-red-500/30 transition-all active:scale-95">
                                     <ShieldAlert className="w-4 h-4" /> ما وصلني شي 🤨
                                   </button>
                                 </div>

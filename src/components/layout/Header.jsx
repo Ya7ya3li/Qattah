@@ -10,7 +10,7 @@ const Header = ({ myTotalAmount = 0, onClearMyExpenses, notifications = [], onCl
       <div className="bg-qattah-dark/80 backdrop-blur-xl border border-white/10 rounded-3xl p-4 flex justify-between items-center shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
         
         <div>
-          <h1 className="text-white text-2xl font-extrabold tracking-wide">Qattah</h1>
+          <h1 className="text-white text-2xl font-extrabold tracking-wide">قِطّة</h1>
           <span className="text-qattah-neonGreen text-xs font-bold">صفي النية وسدد 💸</span>
         </div>
 
