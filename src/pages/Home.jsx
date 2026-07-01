@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Receipt, AlertOctagon, CheckCircle2, Image as ImageIcon, Trash2, Edit3, FileText, X } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
 
-const Home = ({ expenses, currentUser }) => {
-  const [selectedExpense, setSelectedExpense] = useState(null); // للتحكم بنافذة التفاصيل
+const Home = ({ expenses, currentUser, onEdit }) => {
+  const [selectedExpense, setSelectedExpense] = useState(null); 
 
   const toggleAlert = async (id, currentAlertStatus) => {
     const { error } = await supabase.from('expenses').update({ is_alert: !currentAlertStatus }).eq('id', id);
@@ -16,10 +16,6 @@ const Home = ({ expenses, currentUser }) => {
     if (confirmDelete) {
       await supabase.from('expenses').delete().eq('id', id);
     }
-  };
-
-  const handleEdit = () => {
-    alert('شاشة التعديل الكاملة تحت البرمجة حالياً 🚧. تقدر تحذف الفاتورة وتضيفها من جديد مؤقتاً.');
   };
 
   return (
@@ -61,14 +57,16 @@ const Home = ({ expenses, currentUser }) => {
                 </div>
               )}
 
-              {/* 🕹️ الأزرار الجديدة (تفاصيل - تعديل - حذف) */}
+              {/* 🕹️ الأزرار (تفاصيل - تعديل - حذف) */}
               <div className="flex justify-between items-end mt-4 pt-4 border-t border-white/5">
                 <div className="flex gap-2">
                   <button onClick={() => setSelectedExpense(expense)} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all">
                     <FileText className="w-4 h-4" /> التفاصيل
                   </button>
+                  
+                  {/* 🚀 هذا هو زر التعديل اللي ربطناه بالدالة */}
                   {isOwner && (
-                    <button onClick={handleEdit} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-black transition-all">
+                    <button onClick={() => onEdit(expense)} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-black transition-all">
                       <Edit3 className="w-4 h-4" /> تعديل
                     </button>
                   )}

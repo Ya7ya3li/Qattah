@@ -12,8 +12,10 @@ function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [expenses, setExpenses] = useState([]);
   const [notifications, setNotifications] = useState([]); 
-  
   const [currentUser, setCurrentUser] = useState(null);
+  
+  // 🌟 حالة جديدة لحفظ الفاتورة المراد تعديلها
+  const [editingExpense, setEditingExpense] = useState(null);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -60,21 +62,40 @@ function App() {
     setNotifications(data || []);
   };
 
-  // 🚀 التحديث الأهم: هنا نرسل كل البيانات الجديدة للسيرفر (التقسيم + STC + IBAN)
-  const handleAddExpense = async (newExpense) => {
-    const { error } = await supabase.from('expenses').insert([{
-      title: newExpense.title,
-      payer: newExpense.payer,
-      amount: newExpense.amount,
-      involved: newExpense.involved,
-      user_id: newExpense.userId,
-      image_url: newExpense.image_url,
-      is_alert: false,
-      splits: newExpense.splits,
-      stc_pay: newExpense.stc_pay,
-      iban: newExpense.iban
-    }]);
-    if (!error) setActiveTab('home');
+  // 🚀 دالة الحفظ المحدثة (تفرق بين إضافة فاتورة جديدة أو تعديل قديمة)
+  const handleAddExpense = async (newExpense, isEdit = false, expenseId = null) => {
+    if (isEdit && expenseId) {
+      const { error } = await supabase.from('expenses').update({
+        title: newExpense.title,
+        amount: newExpense.amount,
+        involved: newExpense.involved,
+        splits: newExpense.splits,
+        stc_pay: newExpense.stc_pay,
+        iban: newExpense.iban,
+        image_url: newExpense.image_url
+      }).eq('id', expenseId);
+
+      if (!error) {
+        setEditingExpense(null);
+        setActiveTab('home');
+      } else {
+        alert('حدث خطأ أثناء التعديل!');
+      }
+    } else {
+      const { error } = await supabase.from('expenses').insert([{
+        title: newExpense.title,
+        payer: newExpense.payer,
+        amount: newExpense.amount,
+        involved: newExpense.involved,
+        user_id: newExpense.userId,
+        image_url: newExpense.image_url,
+        is_alert: false,
+        splits: newExpense.splits,
+        stc_pay: newExpense.stc_pay,
+        iban: newExpense.iban
+      }]);
+      if (!error) setActiveTab('home');
+    }
   };
 
   const handleClearNotifications = async () => {
@@ -83,27 +104,26 @@ function App() {
   };
 
   const handleClearMyExpenses = async () => {
-    if (!currentUser) {
-      alert('لازم تسجل دخول عشان تصفر فواتيرك!');
-      return;
-    }
-    
-    const confirmClear = window.confirm('متأكد تبي تحذف كل الفواتير اللي أنت سجلتها؟ (هذا الإجراء ما يمسح فواتير أخوياك)');
-    
+    if (!currentUser) return;
+    const confirmClear = window.confirm('متأكد تبي تحذف كل الفواتير اللي أنت سجلتها؟');
     if (confirmClear) {
       const { error } = await supabase.from('expenses').delete().eq('user_id', currentUser.id); 
       if (error) alert('حدث خطأ أثناء مسح فواتيرك!');
     }
   };
 
-  const handleLogin = (user) => {
-    setCurrentUser(user);
-  };
+  const handleLogin = (user) => setCurrentUser(user);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
     setActiveTab('home');
+  };
+
+  // تفريغ وضع "التعديل" إذا انتقل المستخدم لأي شاشة ثانية
+  const handleTabChange = (tab) => {
+    if (tab !== 'add') setEditingExpense(null);
+    setActiveTab(tab);
   };
 
   const myTotalAmount = expenses
@@ -120,20 +140,29 @@ function App() {
       />
       
       <main className="w-full max-w-lg mx-auto">
-        {activeTab === 'home' && <Home expenses={expenses} currentUser={currentUser} />}
+        {activeTab === 'home' && (
+          <Home 
+            expenses={expenses} 
+            currentUser={currentUser} 
+            onEdit={(exp) => {
+              setEditingExpense(exp); // تجهيز الفاتورة للتعديل
+              setActiveTab('add');    // نقله لشاشة الإضافة
+            }} 
+          />
+        )}
         
-        {/* 🚀 السطر السحري: مررنا هوية المستخدم لشاشة الفضايح عشان تعرف مين اللي يطالعها */}
         {activeTab === 'summary' && <RoastSummary expenses={expenses} currentUser={currentUser} />}
         
         {activeTab === 'add' && (
-          currentUser ? <AddExpense onAdd={handleAddExpense} currentUser={currentUser} /> : <Login onLogin={handleLogin} />
+          currentUser ? <AddExpense onAdd={handleAddExpense} currentUser={currentUser} editingExpense={editingExpense} /> : <Login onLogin={handleLogin} />
         )}
+        
         {activeTab === 'profile' && (
           currentUser ? <Profile currentUser={currentUser} onLogout={handleLogout} /> : <Login onLogin={handleLogin} />
         )}
       </main>
 
-      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+      <BottomNav activeTab={activeTab} setActiveTab={handleTabChange} />
     </div>
   );
 }

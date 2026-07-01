@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import InputField from '../components/ui/InputField';
 import NeonButton from '../components/ui/NeonButton';
-import { Receipt, Send, Plus, Camera, Loader2, PieChart, Users, X, CreditCard, ChevronDown } from 'lucide-react';
+import { Receipt, Send, Plus, Camera, Loader2, PieChart, Users, X, CreditCard } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
 
-const AddExpense = ({ onAdd, currentUser }) => {
+const AddExpense = ({ onAdd, currentUser, editingExpense }) => {
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [involved, setInvolved] = useState([currentUser.name]);
@@ -17,14 +17,45 @@ const AddExpense = ({ onAdd, currentUser }) => {
   const [receiptFile, setReceiptFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const [stcPay, setStcPay] = useState(currentUser?.stc_pay || '');
-  const [iban, setIban] = useState(currentUser?.iban || '');
+  const [stcPay, setStcPay] = useState('');
+  const [iban, setIban] = useState('');
 
-  // 👥 حالات الشلة (الأصدقاء)
   const [friends, setFriends] = useState([]);
   const [showFriendsList, setShowFriendsList] = useState(false);
 
-  // جلب قائمة الأصدقاء (اللي تتابعهم) من قاعدة البيانات
+  // 🌟 سحب بيانات الفاتورة إذا كنا في وضع "التعديل"
+  useEffect(() => {
+    if (editingExpense) {
+      setTitle(editingExpense.title);
+      setAmount(editingExpense.amount.toString());
+      setInvolved(editingExpense.involved);
+      setStcPay(editingExpense.stc_pay || '');
+      setIban(editingExpense.iban || '');
+
+      const newCustom = {};
+      let isEqual = true;
+      const equalShare = Number(editingExpense.amount) / editingExpense.involved.length;
+
+      if (editingExpense.splits) {
+        editingExpense.splits.forEach(s => {
+          newCustom[s.name] = s.amount;
+          if (Math.abs(s.amount - equalShare) > 0.1) isEqual = false;
+        });
+      }
+      setCustomAmounts(newCustom);
+      setSplitType(isEqual ? 'equal' : 'custom');
+    } else {
+      // تصفير إذا كنا نضيف فاتورة جديدة
+      setTitle('');
+      setAmount('');
+      setInvolved([currentUser.name]);
+      setSplitType('equal');
+      setCustomAmounts({ [currentUser.name]: '' });
+      setStcPay(currentUser?.stc_pay || '');
+      setIban(currentUser?.iban || '');
+    }
+  }, [editingExpense, currentUser]);
+
   useEffect(() => {
     const fetchFriends = async () => {
       const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', currentUser.id);
@@ -37,15 +68,11 @@ const AddExpense = ({ onAdd, currentUser }) => {
     if (currentUser) fetchFriends();
   }, [currentUser]);
 
-  // دالة زر (+) الذكي
   const handleAddPerson = () => {
-    // إذا الخانة فاضية، نفتح أو نقفل قائمة الشلة
     if (!newPerson.trim()) {
       setShowFriendsList(!showFriendsList);
       return;
     }
-    
-    // إذا كاتب اسم يدوي، نضيفه
     if (!involved.includes(newPerson)) {
       setInvolved([...involved, newPerson]);
       setCustomAmounts(prev => ({ ...prev, [newPerson]: '' }));
@@ -54,13 +81,12 @@ const AddExpense = ({ onAdd, currentUser }) => {
     }
   };
 
-  // دالة اختيار صديق من القائمة
   const handleSelectFriend = (friendName) => {
     if (!involved.includes(friendName)) {
       setInvolved([...involved, friendName]);
       setCustomAmounts(prev => ({ ...prev, [friendName]: '' }));
     }
-    setShowFriendsList(false); // نقفل القائمة بعد الاختيار
+    setShowFriendsList(false);
   };
 
   const handleRemovePerson = (person) => {
@@ -93,7 +119,7 @@ const AddExpense = ({ onAdd, currentUser }) => {
       finalSplits = involved.map(person => ({
         name: person,
         amount: Number(customAmounts[person] || 0),
-        status: person === currentUser.name ? 'paid' : 'pending'
+        status: person === currentUser.name ? 'paid' : 'pending' 
       }));
     } else {
       const equalShare = totalAmount / involved.length;
@@ -104,8 +130,16 @@ const AddExpense = ({ onAdd, currentUser }) => {
       }));
     }
 
+    // 🌟 دمج حالات الدفع القديمة (عشان ما يتصفر اللي سدد إذا عدلت الفاتورة)
+    if (editingExpense && editingExpense.splits) {
+       finalSplits = finalSplits.map(newSplit => {
+          const oldSplit = editingExpense.splits.find(s => s.name === newSplit.name);
+          return oldSplit ? { ...newSplit, status: oldSplit.status } : newSplit;
+       });
+    }
+
     setIsUploading(true);
-    let imageUrl = null;
+    let imageUrl = editingExpense ? editingExpense.image_url : null; // نحتفظ بالصورة القديمة
 
     try {
       if (receiptFile) {
@@ -119,22 +153,23 @@ const AddExpense = ({ onAdd, currentUser }) => {
 
       const newExpense = {
         title: title,
-        payer: currentUser.name,
+        payer: editingExpense ? editingExpense.payer : currentUser.name,
         amount: totalAmount,
         involved: involved,
         userId: currentUser.id,
         image_url: imageUrl,
         splits: finalSplits,
         stc_pay: stcPay,
-        iban: iban       
+        iban: iban
       };
 
       if (stcPay || iban) {
         await supabase.from('profiles').update({ stc_pay: stcPay, iban: iban }).eq('id', currentUser.id);
       }
 
-      await onAdd(newExpense);
-      
+      // 🌟 إرسال الفاتورة إما كجديدة أو تعديل للقديمة
+      await onAdd(newExpense, !!editingExpense, editingExpense?.id);
+
       setTitle(''); setAmount(''); setInvolved([currentUser.name]); setReceiptFile(null); setSplitType('equal');
     } catch (error) {
       console.error('خطأ:', error);
@@ -150,8 +185,12 @@ const AddExpense = ({ onAdd, currentUser }) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col gap-6 px-6 pb-32 pt-4">
       <div className="mb-2">
-        <h2 className="text-gray-300 text-xl font-bold">مرحباً {currentUser.name} 👋</h2>
-        <p className="text-gray-500 text-sm">سجل الفاتورة، وقسمها على كيفك.</p>
+        <h2 className="text-gray-300 text-xl font-bold">
+          {editingExpense ? `تعديل فاتورة: ${editingExpense.title} ✏️` : `مرحباً ${currentUser.name} 👋`}
+        </h2>
+        <p className="text-gray-500 text-sm">
+          {editingExpense ? 'عدل البيانات واضغط حفظ التعديلات تحت.' : 'سجل الفاتورة، وقسمها على كيفك.'}
+        </p>
       </div>
       
       <InputField label="وش الدفعية؟" placeholder="مثلاً: عشاء، شاليه..." value={title} onChange={(e) => setTitle(e.target.value)} icon={Receipt} />
@@ -192,40 +231,22 @@ const AddExpense = ({ onAdd, currentUser }) => {
           ))}
         </div>
 
-        {/* 🌟 مربع إضافة صديق الجديد الذكي */}
         <div className="relative">
           <div className="flex gap-2">
-            <input 
-              type="text" 
-              placeholder="اكتب اسم، أو اضغط + لاختيار خويك" 
-              value={newPerson} 
-              onChange={(e) => {
-                setNewPerson(e.target.value);
-                setShowFriendsList(false); // نقفل القائمة إذا بدأ يكتب
-              }} 
-              className="flex-1 bg-black/50 text-white rounded-xl px-4 border border-gray-700 focus:outline-none focus:border-qattah-neonGreen text-sm" 
-            />
+            <input type="text" placeholder="اكتب اسم، أو اضغط + لاختيار خويك" value={newPerson} onChange={(e) => { setNewPerson(e.target.value); setShowFriendsList(false); }} className="flex-1 bg-black/50 text-white rounded-xl px-4 border border-gray-700 focus:outline-none focus:border-qattah-neonGreen text-sm" />
             <button onClick={handleAddPerson} className="bg-gray-700 p-3 rounded-xl text-white hover:bg-qattah-neonGreen hover:text-black transition-colors flex items-center justify-center gap-1 min-w-[50px]">
               <Plus className="w-5 h-5" />
             </button>
           </div>
 
-          {/* 📜 قائمة الأصدقاء المنسدلة */}
           <AnimatePresence>
             {showFriendsList && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                className="absolute top-full left-0 right-0 mt-2 bg-qattah-dark border border-white/10 rounded-2xl p-2 shadow-2xl z-10 max-h-48 overflow-y-auto"
-              >
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="absolute top-full left-0 right-0 mt-2 bg-qattah-dark border border-white/10 rounded-2xl p-2 shadow-2xl z-10 max-h-48 overflow-y-auto">
                 {friends.length === 0 ? (
                   <p className="text-gray-500 text-xs text-center py-4">ما عندك أحد في الشلة للحين 😅<br/>روح لبروفايلك وضيفهم!</p>
                 ) : (
                   friends.map(friend => (
-                    <button 
-                      key={friend.id} 
-                      onClick={() => handleSelectFriend(friend.name)}
-                      className="w-full flex items-center gap-3 p-2 hover:bg-white/5 rounded-xl transition-colors text-left"
-                    >
+                    <button key={friend.id} onClick={() => handleSelectFriend(friend.name)} className="w-full flex items-center gap-3 p-2 hover:bg-white/5 rounded-xl transition-colors text-left">
                       <div className="w-8 h-8 rounded-full bg-black/50 overflow-hidden flex items-center justify-center">
                         {friend.avatar_url ? <img src={friend.avatar_url} className="w-full h-full object-cover"/> : '👤'}
                       </div>
@@ -254,12 +275,12 @@ const AddExpense = ({ onAdd, currentUser }) => {
         <input type="file" accept="image/*" onChange={(e) => e.target.files && setReceiptFile(e.target.files[0])} className="hidden" id="receipt-upload" />
         <label htmlFor="receipt-upload" className="flex items-center justify-center gap-2 bg-black/50 text-white rounded-xl py-3 border border-gray-700 hover:border-qattah-neonGreen cursor-pointer transition-all">
           <Camera className="w-5 h-5 text-qattah-neonGreen" />
-          {receiptFile ? `مرفق: ${receiptFile.name.substring(0,15)}...` : 'اضغط لتصوير الفاتورة'}
+          {receiptFile ? `مرفق: ${receiptFile.name.substring(0,15)}...` : (editingExpense && editingExpense.image_url ? 'إرفاق صورة جديدة بدلاً من القديمة' : 'اضغط لتصوير الفاتورة')}
         </label>
       </div>
 
       <NeonButton color="green" fullWidth icon={isUploading ? Loader2 : Send} onClick={handleSubmit} disabled={isUploading}>
-        {isUploading ? 'جاري الرفع...' : 'سجل الفاتورة'}
+        {isUploading ? 'جاري الحفظ...' : (editingExpense ? 'حفظ التعديلات 💾' : 'سجل الفاتورة')}
       </NeonButton>
     </motion.div>
   );
